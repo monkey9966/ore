@@ -22,17 +22,21 @@ class PipelineConfig:
     debris_diameter_mm: float = 80.0  # 小于该等效直径的分割区域视为碎料(保留标签用于邻接判断)
 
     # ---------- 边界分类 (Stage C) ----------
-    drop_delta_mm: float = 15.0       # h_in - h_out > delta 判为自由边界(向下跌落)
+    drop_delta_mm: float = 12.0       # h_in - h_out > delta 判为自由边界(向下跌落)
     boundary_window_px: int = 13      # 边界点邻域采样窗口(奇数)
     waist_max_ratio: float = 0.55     # 轮廓点高度低于矿石(峰-基准)的该比例 => 腰线以下,
                                       # 属并排接触而非压叠, 轮廓可信(等价自由边界)
 
     # ---------- 完整性判定 (Stage D) ----------
-    free_ratio_min: float = 0.95      # 自由边界占比下限
+    free_ratio_min: float = 0.85      # 自由边界占比下限
+                                      # (0.95 太严: 分水岭脊线像素在噪声下随机
+                                      # 归属, 完整矿石也常有 5-15% 边界被误判
+                                      # 遮挡; 误收由 MULTI_PEAK/TOO_THICK 等
+                                      # 交叉校验兜底, 参数扫描联合选优结果)
     invalid_ratio_max: float = 0.05   # 无效边界占比上限
     border_margin_px: int = 15        # 距图像边缘裕量, 触碰则拒绝
     valid_coverage_min: float = 0.90  # 掩膜内有效像素占比下限
-    solidity_min: float = 0.88        # 面积/凸包面积下限
+    solidity_min: float = 0.85        # 面积/凸包面积下限
     ellipse_iou_min: float = 0.90     # 椭圆拟合IoU下限: 拦截欠分割的"葫芦形"双胞胎
                                       # (真实棱角矿石若误拒率高可下调至0.85)
     feret_ellipse_tol: float = 1.08   # 掩膜Feret不得超过拟合椭圆长轴的该倍数
@@ -43,7 +47,7 @@ class PipelineConfig:
                                       # (外形光滑的"双胞胎"solidity/椭圆IoU
                                       # 拦不住, 靠表面双峰拦)
     peak_interior_ratio: float = 0.20 # 最高点距边界距离 >= 该比例*等效半径
-    thickness_width_max: float = 1.15 # 厚度不得超过次轴的该倍数: 平躺的单块
+    thickness_width_max: float = 1.10 # 厚度不得超过次轴的该倍数: 平躺的单块
                                       # 矿石厚度<=次轴, 明显"过厚"说明是
                                       # 上下两块矿石叠成的合并体
     min_diameter_mm: float = 90.0     # 尺寸下限(带10mm缓冲, 100mm以下不统计)

@@ -198,15 +198,14 @@ def main():
               f"{m['tp']:4d} {m['fp']:3d} {m['feret_err']*100:5.1f}%")
 
     # ---- 验证集复核(独立种子, 防过拟合): 取扫描集前若干名重跑 ----
-    n_check = min(6, len(pool))
+    n_check = min(20, len(pool))
     val_variants = sorted({pool[i][0] for i in range(n_check)})
     val_seeds = [1000 + i for i in range(args.val_frames)]
     print(f"\n验证层: {len(val_variants)} 个变体 × {len(val_seeds)} 帧 ...", flush=True)
     val_data = collect(val_variants, val_seeds, args.stacking, args.n_rocks, args.jobs)
 
-    print(f"\n验证集复核 (独立种子 {val_seeds[0]}..{val_seeds[-1]}):")
+    print(f"\n验证集复核 (独立种子 {val_seeds[0]}..{val_seeds[-1]}, 扫描集Top{n_check}):")
     print(hdr); print("-" * len(hdr))
-    best = None
     for v, th, m in pool[:n_check]:
         n_gt, recs = val_data[v]
         vm = replay_thresholds(recs, n_gt, *th)
@@ -214,11 +213,29 @@ def main():
               f"{th[0]:5.2f} {th[1]:5.2f} {th[2]:5.2f} {th[3]:5.2f} {th[4]:4.0f} {th[5]:5.2f} | "
               f"{vm['precision']*100:5.1f}% {vm['recall']*100:5.1f}% "
               f"{vm['tp']:4d} {vm['fp']:3d} {vm['feret_err']*100:5.1f}%")
-        score = (vm["precision"] >= args.precision_floor, vm["recall"])
-        if best is None or score > best[0]:
-            best = (score, v, th, vm)
+
+    # ---- 联合选优: 对验证层变体重放全部阈值组合, 要求两集查准率都达标,
+    #      再按两集平均查全率取最优(防止在单一种子集上过拟合) ----
+    best = None
+    for v in val_variants:
+        n_gt_s, recs_s = data[v]
+        n_gt_v, recs_v = val_data[v]
+        for th in itertools.product(FREE_RATIO_MIN, SOLIDITY_MIN, ELLIPSE_IOU_MIN,
+                                    FERET_ELLIPSE_TOL, SPLIT_H_MM,
+                                    THICKNESS_WIDTH_MAX):
+            ms = replay_thresholds(recs_s, n_gt_s, *th)
+            mv = replay_thresholds(recs_v, n_gt_v, *th)
+            feasible = (ms["precision"] >= args.precision_floor
+                        and mv["precision"] >= args.precision_floor)
+            score = (feasible, min(ms["precision"], mv["precision"]),
+                     0.5 * (ms["recall"] + mv["recall"]))
+            if best is None or score > best[0]:
+                best = (score, v, th, mv)
 
     _, v, th, vm = best
+    if not best[0][0]:
+        print(f"\n! 没有组合在两套种子上同时达到查准率 {args.precision_floor:.0%}, "
+              f"以下为最接近的组合:")
     print("\n推荐配置(验证集上查准率约束下查全率最优):")
     print(f"    hmax_delta_mm     = {v[0]}")
     print(f"    drop_delta_mm     = {v[1]}")
