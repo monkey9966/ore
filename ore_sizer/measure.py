@@ -68,6 +68,12 @@ def measure_rock(info: RockInfo, mask: np.ndarray, height: np.ndarray,
         info.reject_reasons.append("FERET_ELLIPSE_MISMATCH")
         info.accepted = False
 
+    # 厚度交叉校验: 平躺的单块矿石厚度不会超过次轴; 明显"过厚"说明
+    # 掩膜其实是上层矿石骑在下层矿石上形成的合并体(轮廓看不出来)
+    if info.thickness_mm > cfg.thickness_width_max * max(info.min_rect_w_mm, 1e-3):
+        info.reject_reasons.append("TOO_THICK")
+        info.accepted = False
+
     # 尺寸下限
     if info.sizing_mm < cfg.min_diameter_mm:
         info.reject_reasons.append("TOO_SMALL")

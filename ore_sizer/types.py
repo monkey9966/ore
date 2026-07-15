@@ -39,6 +39,8 @@ REJECT_REASONS = {
     "LOW_SOLIDITY": "形状异常(疑似欠分割/轮廓缺损)",
     "BAD_ELLIPSE_FIT": "椭圆拟合差(疑似两块粘连/欠分割)",
     "FERET_ELLIPSE_MISMATCH": "尺寸交叉校验不一致(疑似附着邻块/碎料)",
+    "MULTI_PEAK": "表面双峰(疑似两块矿石欠分割合并)",
+    "TOO_THICK": "厚度异常(疑似上下两块矿石叠合)",
     "PEAK_ON_EDGE": "最高点贴边(疑似大矿石露出的一角)",
     "TOO_SMALL": "小于统计下限",
 }
@@ -71,6 +73,7 @@ class RockInfo:
     solidity: float = 0.0
     ellipse_iou: float = 0.0
     valid_coverage: float = 0.0
+    split_depth_mm: float = 0.0      # 表面多峰分裂深度(0=单峰, 大=疑似欠分割合并)
 
     # 几何信息(像素坐标, 供可视化/交叉校验)
     meta_ellipse_axes_px: Tuple[float, float] = (0.0, 0.0)

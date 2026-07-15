@@ -16,6 +16,38 @@ import numpy as np
 from scipy import ndimage
 
 
+def _split_depth(mask: np.ndarray, hs: np.ndarray, min_area_px: float,
+                 depths=(6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 20.0)) -> float:
+    """多峰欠分割深度: 最大的谷深 d, 使掩膜内存在两个被深度>=d 的谷
+    分隔、且第二大子区域达到矿石尺寸的表面峰。单峰返回 0。
+
+    两块矿石被鞍点合并成一个掩膜时, 外形往往仍是光滑椭圆
+    (solidity/椭圆IoU 都拦不住), 但表面必然有两个独立峰 —— 这是欠分割
+    合并误收的最后一道闸。单块矿石表面粗糙引起的次峰谷浅或面积小,
+    得到的 split_depth 低, 不会触发拒绝阈值。
+    """
+    from skimage import morphology, segmentation as sks
+
+    ys, xs = np.nonzero(mask)
+    y0, y1 = ys.min(), ys.max() + 1
+    x0, x1 = xs.min(), xs.max() + 1
+    m = mask[y0:y1, x0:x1]
+    h_win = hs[y0:y1, x0:x1]
+    h = np.where(m, h_win, h_win.min() - 1e3)
+
+    best = 0.0
+    for d in depths:
+        peaks = morphology.h_maxima(h, d) & m
+        markers, n = ndimage.label(peaks)
+        if n < 2:
+            break  # 峰数随 d 单调不增, 更深的谷不可能再分裂
+        sub = sks.watershed(-h, markers=markers, mask=m)
+        areas = np.sort(np.bincount(sub.ravel())[1:])[::-1]
+        if len(areas) >= 2 and areas[1] >= min_area_px:
+            best = d
+    return best
+
+
 def _ellipse_fit(mask: np.ndarray) -> Tuple[float, float, float]:
     """返回 (IoU, 椭圆长轴px, 椭圆短轴px)。单块凸矿石 IoU 接近 1。"""
     m8 = mask.astype(np.uint8)
@@ -165,6 +197,12 @@ def evaluate_rock(rid: int, mask: np.ndarray, frame: HeightFrame,
     info.meta_ellipse_axes_px = (ell_major_px, ell_minor_px)
     if iou < cfg.ellipse_iou_min:
         info.reject_reasons.append("BAD_ELLIPSE_FIT")
+    # 5d. 多峰欠分割: 表面存在两个被深谷分隔的矿石级峰 => 合并体, 拒绝
+    min_rock_px = (cfg.debris_diameter_mm / frame.mm_per_px / 2) ** 2 * np.pi
+    sd = _split_depth(mask, hs, min_rock_px)
+    info.split_depth_mm = sd
+    if sd >= cfg.split_h_mm:
+        info.reject_reasons.append("MULTI_PEAK")
     # 6. 最高点在掩膜内部
     hs_rock = np.where(mask, hs, -np.inf)
     py, px = np.unravel_index(np.argmax(hs_rock), hs_rock.shape)

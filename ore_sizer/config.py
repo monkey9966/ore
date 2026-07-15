@@ -37,7 +37,15 @@ class PipelineConfig:
                                       # (真实棱角矿石若误拒率高可下调至0.85)
     feret_ellipse_tol: float = 1.08   # 掩膜Feret不得超过拟合椭圆长轴的该倍数
                                       # (交叉校验: 拦截附着邻块导致的尺寸虚大)
+    split_h_mm: float = 10.0          # 多峰欠分割检测: 掩膜内若存在两个被
+                                      # 深度>=此值的谷分隔、且第二块达到矿石
+                                      # 尺寸的峰, 判为欠分割合并体并拒绝
+                                      # (外形光滑的"双胞胎"solidity/椭圆IoU
+                                      # 拦不住, 靠表面双峰拦)
     peak_interior_ratio: float = 0.20 # 最高点距边界距离 >= 该比例*等效半径
+    thickness_width_max: float = 1.15 # 厚度不得超过次轴的该倍数: 平躺的单块
+                                      # 矿石厚度<=次轴, 明显"过厚"说明是
+                                      # 上下两块矿石叠成的合并体
     min_diameter_mm: float = 90.0     # 尺寸下限(带10mm缓冲, 100mm以下不统计)
 
     # ---------- 统计 (Stage G) ----------
